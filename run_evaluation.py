@@ -6,8 +6,8 @@ if __name__ == "__main__":
         for model in ["instruct", "pretrain"]:
             print(f"===BLIP2 {model} Flan T5 XXL===")
             pred_path = f"predictions/zeroshot_blip2_t5_{model}_flant5xxl_{split}.jsonl"
-            reference_path = f"infoseek/infoseek_{split}.jsonl"
-            reference_qtype_path = f"infoseek/infoseek_{split}_qtype.jsonl"
+            reference_path = f"infoseek_data/infoseek_{split}.jsonl"
+            reference_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
 
             result = evaluate(pred_path, reference_path, reference_qtype_path)
             final_score = result["final_score"]

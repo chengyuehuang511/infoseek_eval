@@ -4,6 +4,7 @@ import re
 import json
 import string
 from typing import Any, Dict, Generator, List, Tuple, Union
+from infoseek_data.data_path import OVEN_SPLIT2DATA, INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES
 
 
 def normalize_answer(text: str) -> str:
@@ -345,7 +346,9 @@ def evaluate_infoseek_full(
         for pred, qid2example in zip(predictions, qid2examples):
             split_score = evaluate_infoseek(pred, qid2example)
             infoseek_score.append(split_score)
+        # print(infoseek_score)
         split_scores = [score['score'] for score in infoseek_score]
+        # print(split_scores)
         return {
             'final_score': round(harmonic_mean(*split_scores), 2),
             'unseen_question_score': infoseek_score[0],
@@ -368,6 +371,7 @@ def evaluate(prediction_path: str, reference_path: str, reference_qtype_path: st
     reference = load_jsonl(reference_path)
     reference_qtype = load_jsonl(reference_qtype_path)
     qid2example = prepare_qid2example(reference, reference_qtype)
+    # print(qid2example)
     # split predictions into two splits: unseen_question and unseen_entity
     unseen_question = []
     unseen_entity = []
