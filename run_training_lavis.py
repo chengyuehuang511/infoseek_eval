@@ -13,18 +13,19 @@ from PIL import Image
 import json
 from infoseek_eval import evaluate as evaluate_infoseek
 import argparse
+from infoseek_data.data_path import INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES, OVEN_SPLIT2DATA
 
 split2data = {
-        "val": "infoseek/infoseek_val.jsonl",
-        "test": "infoseek/infoseek_test.jsonl",
-        "human": "infoseek/infoseek_human.jsonl",
-        "train": "infoseek/infoseek_train.jsonl"
+        "val": "infoseek_data/infoseek_val.jsonl",
+        "test": "infoseek_data/infoseek_test.jsonl",
+        "human": "infoseek_data/infoseek_human.jsonl",
+        "train": "infoseek_data/infoseek_train.jsonl"
     }
 
 id2path = dict()
 
 # load image paths
-with open("id2image.jsonl", "r") as f:
+with open(ID2IMAGE, "r") as f:
     for line in f:
         line = json.loads(line)
         image_id = line["image_id"]
@@ -86,7 +87,7 @@ def process_images_in_batches(model, batch_data, batch_size, prompt):
         # Generate predictions for the batch
         
         answers = model.generate({"image": image_batch, "prompt": batch_questions},
-                                 length_penalty=-1)
+                                 length_penalty=-1)  # default: num_beams=5
         # print(batch_questions)
         # print(answers)
         
@@ -102,12 +103,13 @@ def evaluate_model(split, model, batch_size, step, prompt, name):
 
     # Save the predictions
     pred_path = f"development/blip2_t5_{name}_flant5xxl_{split}_{step}.jsonl"
-    ref_path = f"infoseek/infoseek_{split}.jsonl"
+    ref_path = f"infoseek_data/infoseek_{split}.jsonl"
+    ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
     with open(pred_path, "w") as f:
         for item in output:
             f.write(json.dumps(item) + "\n")
 
-    result = evaluate_infoseek(pred_path, ref_path)
+    result = evaluate_infoseek(pred_path, ref_path, ref_qtype_path)
     return result
 
 
@@ -151,7 +153,8 @@ if __name__ == "__main__":
     parser.add_argument("--split", type=str, default="val", help="val, test, or human")
     parser.add_argument("--name", type=str, default="pretrain", help="blip2_t5 | blip2_vicuna_instruct | blip2_t5_instruct")
     parser.add_argument("--output_dir", type=str, default="predictions", help="output directory")
-    parser.add_argument("--batch_size", type=int, default=32, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=16, help="batch size")
+    parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
 
 
@@ -169,10 +172,10 @@ if __name__ == "__main__":
                                                             device="cuda")
         
 
-    raw_image = Image.open("aircraft.png").convert("RGB")
-    image = vis_processors["eval"](raw_image).unsqueeze(0).to("cuda")
-    output = model.generate({"image": image, "prompt": "Question: what is the date this aircraft took the first flight? Answer:"})
-    print(output)
+    # raw_image = Image.open("aircraft.png").convert("RGB")
+    # image = vis_processors["eval"](raw_image).unsqueeze(0).to("cuda")
+    # output = model.generate({"image": image, "prompt": "Question: what is the date this aircraft took the first flight? Answer:"})
+    # print(output)
 
     blip_dataset = BLIP2Dataset(
         split="train",
@@ -194,7 +197,7 @@ if __name__ == "__main__":
             param.requires_grad = False
 
     # optmizer adamw for all parameters require grad
-    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=5e-5)
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
@@ -205,14 +208,14 @@ if __name__ == "__main__":
     optimization_step = 0
     for epoch in range(1):
         print("Epoch:", epoch)
-        for idx, batch in enumerate(train_dataloader):
+        for idx, batch in enumerate(tqdm(train_dataloader)):
             batch["image"] = batch["image"].squeeze(1).to(device)
             output = model(samples=batch)
             loss = output["loss"]
             # Gradient acculation
             loss = loss / accum_iter
             loss.backward()
-            print(loss.item())
+            # print(loss.item())
             if (idx + 1) % accum_iter == 0:
                 optimization_step += 1
                 optimizer.step()

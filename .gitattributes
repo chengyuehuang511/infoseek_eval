@@ -1,0 +1,2 @@
+/nethome/chuang475/flash/projects/infoseek_eval/infoseek_data/infoseek_human.jsonl filter=lfs diff=lfs merge=lfs -text
+*.jsonl filter=lfs diff=lfs merge=lfs -text

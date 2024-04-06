@@ -1,3 +1,4 @@
+"""Finetuned BLIP2 Inference - InfosEEK"""
 import os
 import json
 import torch
@@ -7,6 +8,7 @@ from multiprocessing import Pool
 import argparse
 from tqdm import tqdm
 import time
+from infoseek_data.data_path import INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES, OVEN_SPLIT2DATA
 
 def load_and_process_image(item):
     # Load and preprocess the image
@@ -64,15 +66,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     split2data = {
-        "val": "infoseek/infoseek_val.jsonl",
-        "test": "infoseek/infoseek_test.jsonl",
-        "human": "infoseek/infoseek_human.jsonl",
+        "val": "infoseek_data/infoseek_val.jsonl",
+        "test": "infoseek_data/infoseek_test.jsonl",
+        "human": "infoseek_data/infoseek_human.jsonl",
     }
 
     id2path = dict()
 
     # load image paths
-    with open("id2image.jsonl", "r") as f:
+    with open(ID2IMAGE, "r") as f:
         for line in f:
             line = json.loads(line)
             image_id = line["image_id"]
