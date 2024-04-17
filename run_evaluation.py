@@ -5,7 +5,8 @@ if __name__ == "__main__":
     for split in ["val"]:
         for model in ["instruct", "pretrain"]:
             print(f"===BLIP2 {model} Flan T5 XXL===")
-            pred_path = f"predictions/zeroshot_blip2_t5_{model}_flant5xxl_{split}.jsonl"
+            # pred_path = f"predictions/zeroshot_blip2_t5_{model}_flant5xxl_{split}.jsonl"
+            pred_path = "development/blip2_t5_pretrain_flant5xxl_val_399.jsonl"
             reference_path = f"infoseek_data/infoseek_{split}.jsonl"
             reference_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
 

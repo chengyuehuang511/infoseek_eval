@@ -14,7 +14,6 @@ import json
 from infoseek_eval import evaluate as evaluate_infoseek
 import argparse
 from infoseek_data.data_path import INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES, OVEN_SPLIT2DATA
-from peft import LoraConfig, get_peft_model
 
 split2data = {
         "val": "infoseek_data/infoseek_val.jsonl",
@@ -103,7 +102,7 @@ def evaluate_model(split, model, batch_size, step, prompt, name):
     output = process_images_in_batches(model, batch_data, batch_size, prompt)
 
     # Save the predictions
-    pred_path = f"development_{args.batch_size}_all_lora/blip2_t5_{name}_flant5xxl_{split}_{step}.jsonl"
+    pred_path = f"development_{args.batch_size}_all/blip2_t5_{name}_flant5xxl_{split}_{step}.jsonl"
     ref_path = f"infoseek_data/infoseek_{split}.jsonl"
     ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
     with open(pred_path, "w") as f:
@@ -149,7 +148,6 @@ class BLIP2Dataset(torch.utils.data.Dataset):
     
 
 if __name__ == "__main__":
-    print("Initialize Processor...")
     parser = argparse.ArgumentParser()
     parser.add_argument("--split", type=str, default="val", help="val, test, or human")
     parser.add_argument("--name", type=str, default="pretrain", help="blip2_t5 | blip2_vicuna_instruct | blip2_t5_instruct")
@@ -157,7 +155,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=16, help="batch size")
     parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
-    parser.add_argument("--use_lora", action="store_true", help="use lora")
 
 
     args = parser.parse_args()
@@ -165,94 +162,26 @@ if __name__ == "__main__":
     if args.name == "pretrain":
         model, vis_processors, _ = load_model_and_preprocess(name="blip2_t5", 
                                                             model_type="pretrain_flant5xxl", 
-                                                            is_eval=False, 
+                                                            is_eval=True, 
                                                             device="cuda")
     elif args.name == "instruct":
         model, vis_processors, _ = load_model_and_preprocess(name="blip2_t5_instruct", 
                                                             model_type="flant5xxl", 
-                                                            is_eval=False, 
+                                                            is_eval=True, 
                                                             device="cuda")
-    else:
-        raise ValueError("Invalid model name")
-    
-    if args.use_lora:
-        config = LoraConfig(
-            r=16,
-            lora_alpha=32,
-            lora_dropout=0.05,
-            bias="none",
-            target_modules=['v', 'q', 'qkv'],  # qformer, qkv
-        )
-        
-        print(config)
-        model = get_peft_model(model, config)
-        
-
-    # raw_image = Image.open("aircraft.png").convert("RGB")
-    # image = vis_processors["eval"](raw_image).unsqueeze(0).to("cuda")
-    # output = model.generate({"image": image, "prompt": "Question: what is the date this aircraft took the first flight? Answer:"})
-    # print(output)
-
-    blip_dataset = BLIP2Dataset(
-        split="train",
-        processor=vis_processors,
-        PROMPT="Question: {} Short answer:"
-    )
-    print("Initialize Dataloader...")
-    # Padding dataloader
-    train_dataloader = DataLoader(
-        blip_dataset, batch_size=args.batch_size, shuffle=True, num_workers=6
-    )
 
     # # freeze everything except qformer
     print("Freeze Model...")
     for name, param in model.named_parameters():
+        # print(name)
         if "Qformer" in name:
-            param.requires_grad = True
+            print(name)
+        #     param.requires_grad = True
         # else:
         #     param.requires_grad = False
-            # param.requires_grad = True
-    
-    # use lora to train the visual and text encoder
-    if args.use_lora:
-        model.print_trainable_parameters()
+        #     # param.requires_grad = True
 
-    # optmizer adamw for all parameters require grad
-    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
+    # visual_encoder
+    # Qformer: bert.encoder
+    # t5_model: encoder + decoder
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
-    model.train()
-
-    accum_iter = args.accumulation_steps
-
-    optimization_step = 0
-    for epoch in range(1):
-        print("Epoch:", epoch)
-        for idx, batch in enumerate(tqdm(train_dataloader)):
-            batch["image"] = batch["image"].squeeze(1).to(device)
-            output = model(samples=batch)
-            loss = output["loss"]
-            # Gradient accumulation
-            loss = loss / accum_iter
-            loss.backward()
-            # print(loss.item())
-            if (idx + 1) % accum_iter == 0:
-                optimization_step += 1
-                optimizer.step()
-                optimizer.zero_grad()
-
-                if (optimization_step + 1) % 1000 == 0:
-                    print("Evaluation...")
-                    model.eval()
-                    val_result = evaluate_model(split="val", model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
-                                            name=args.name)      
-                    print("Step:", idx)
-                    print("Validation result:")
-                    print(val_result)
-                    cur_val_score = val_result["final_score"]
-                    torch.save(model.state_dict(), f"development_{args.batch_size}_all_lora/blip2_t5_{args.name}_flant5xxl_{optimization_step}_val={cur_val_score}.pt")
-                    model.train()
-
-            # if optimization_step > 1000:
-            #     break
