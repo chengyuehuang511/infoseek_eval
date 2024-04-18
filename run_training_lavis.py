@@ -96,14 +96,15 @@ def process_images_in_batches(model, batch_data, batch_size, prompt):
             output.append({"data_id": idx, "prediction": ans})
     return output
 
-def evaluate_model(split, model, batch_size, step, prompt, name):
+def evaluate_model(split, model, batch_size, step, prompt, args):
     # Create evaluate data
     batch_data = create_eval_data(split)
     # Process the data in batches
     output = process_images_in_batches(model, batch_data, batch_size, prompt)
 
     # Save the predictions
-    pred_path = f"development_{args.batch_size}_all_lora/blip2_t5_{name}_flant5xxl_{split}_{step}.jsonl"
+    # development_{args.batch_size}_all_lora
+    pred_path = f"{args.output_dir}/{args.name}_{args.model_type}_{split}_{step}.jsonl"
     ref_path = f"infoseek_data/infoseek_{split}.jsonl"
     ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
     with open(pred_path, "w") as f:
@@ -152,28 +153,22 @@ if __name__ == "__main__":
     print("Initialize Processor...")
     parser = argparse.ArgumentParser()
     parser.add_argument("--split", type=str, default="val", help="val, test, or human")
-    parser.add_argument("--name", type=str, default="pretrain", help="blip2_t5 | blip2_vicuna_instruct | blip2_t5_instruct")
+    parser.add_argument("--name", type=str, default="blip2_t5", help="blip2_t5 | blip2_t5_instruct | blip2_opt | blip2_vicuna_instruct")
+    parser.add_argument("--model_type", type=str, default="pretrain_flant5xxl", help="pretrain_flant5xxl ｜ flant5xxl ｜ pretrain_opt2.7b")
     parser.add_argument("--output_dir", type=str, default="predictions", help="output directory")
     parser.add_argument("--batch_size", type=int, default=16, help="batch size")
     parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
     parser.add_argument("--use_lora", action="store_true", help="use lora")
+    parser.add_argument("--target_modules", type=list, default=["v", "q", "qkv"], help="target modules")
 
 
     args = parser.parse_args()
 
-    if args.name == "pretrain":
-        model, vis_processors, _ = load_model_and_preprocess(name="blip2_t5", 
-                                                            model_type="pretrain_flant5xxl", 
-                                                            is_eval=False, 
-                                                            device="cuda")
-    elif args.name == "instruct":
-        model, vis_processors, _ = load_model_and_preprocess(name="blip2_t5_instruct", 
-                                                            model_type="flant5xxl", 
-                                                            is_eval=False, 
-                                                            device="cuda")
-    else:
-        raise ValueError("Invalid model name")
+    model, vis_processors, _ = load_model_and_preprocess(name=args.name,
+                                                         model_type=args.model_type, 
+                                                         is_eval=False, 
+                                                         device="cuda")
     
     if args.use_lora:
         config = LoraConfig(
@@ -181,7 +176,7 @@ if __name__ == "__main__":
             lora_alpha=32,
             lora_dropout=0.05,
             bias="none",
-            target_modules=['v', 'q', 'qkv'],  # qformer, qkv
+            target_modules=args.target_modules,  # ['v', 'q', 'qkv'],  # qformer, qkv
         )
         
         print(config)
@@ -246,12 +241,12 @@ if __name__ == "__main__":
                     print("Evaluation...")
                     model.eval()
                     val_result = evaluate_model(split="val", model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
-                                            name=args.name)      
+                                                args=args)      
                     print("Step:", idx)
                     print("Validation result:")
                     print(val_result)
                     cur_val_score = val_result["final_score"]
-                    torch.save(model.state_dict(), f"development_{args.batch_size}_all_lora/blip2_t5_{args.name}_flant5xxl_{optimization_step}_val={cur_val_score}.pt")
+                    torch.save(model.state_dict(), f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}.pt")
                     model.train()
 
             # if optimization_step > 1000:
