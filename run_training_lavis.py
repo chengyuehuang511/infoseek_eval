@@ -160,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
     parser.add_argument("--use_lora", action="store_true", help="use lora")
-    parser.add_argument("--target_modules", type=list, default=["v", "q", "qkv"], help="target modules")
+    parser.add_argument("--target_modules", type=str, default=["v", "q", "qkv"], nargs='*', help="target modules")
 
 
     args = parser.parse_args()

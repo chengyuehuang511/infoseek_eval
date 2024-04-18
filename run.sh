@@ -12,7 +12,7 @@ name="blip2_opt"
 model_type="pretrain_opt2.7b"
 batch_size=8
 accumulation_steps=2
-target_modules='["v", "q", "qkv"]'
+target_modules="v q qkv"
 use_lora=True
 
 # Create the output directory name
@@ -27,7 +27,7 @@ mkdir -p "$output_dir"
                                                           --model_type "$model_type" \
                                                           --batch_size $batch_size \
                                                           --accumulation_steps $accumulation_steps \
-                                                          --target_modules="$target_modules" \
+                                                          --target_modules $target_modules \
                                                           --output_dir "$output_dir" \
                                                           --use_lora
 
