@@ -16,12 +16,14 @@ import argparse
 from infoseek_data.data_path import INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES, OVEN_SPLIT2DATA
 from peft import LoraConfig, get_peft_model
 
+ratio = "10%"
 split2data = {
-        "val": "infoseek_data/infoseek_val.jsonl",
-        "test": "infoseek_data/infoseek_test.jsonl",
-        "human": "infoseek_data/infoseek_human.jsonl",
-        "train": "infoseek_data/infoseek_train.jsonl"
+        "val": f"infoseek_data/infoseek_val_{ratio}.jsonl",
+        "test": f"infoseek_data/infoseek_test_{ratio}.jsonl",
+        "human": f"infoseek_data/infoseek_human_{ratio}.jsonl",
+        "train": f"infoseek_data/infoseek_train_{ratio}.jsonl"
     }
+# /coc/pskynet6/ychen3411/multimodal/infoseek/infoseek_qtype
 
 id2path = dict()
 
@@ -96,7 +98,7 @@ def process_images_in_batches(model, batch_data, batch_size, prompt):
             output.append({"data_id": idx, "prediction": ans})
     return output
 
-def evaluate_model(split, model, batch_size, step, prompt, args):
+def evaluate_model(split, model, batch_size, step, prompt, args, epoch):
     # Create evaluate data
     batch_data = create_eval_data(split)
     # Process the data in batches
@@ -104,7 +106,7 @@ def evaluate_model(split, model, batch_size, step, prompt, args):
 
     # Save the predictions
     # development_{args.batch_size}_all_lora
-    pred_path = f"{args.output_dir}/{args.name}_{args.model_type}_{split}_{step}.jsonl"
+    pred_path = f"{args.output_dir}/{args.name}_{args.model_type}_{split}_{step}_epoch={epoch}.jsonl"
     ref_path = f"infoseek_data/infoseek_{split}.jsonl"
     ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
     with open(pred_path, "w") as f:
@@ -159,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=16, help="batch size")
     parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
-    parser.add_argument("--use_lora", action="store_true", help="use lora")
+    parser.add_argument("--use_lora", type=int, help="use lora")
     parser.add_argument("--target_modules", type=str, default=["v", "q", "qkv"], nargs='*', help="target modules")
 
 
@@ -169,8 +171,8 @@ if __name__ == "__main__":
                                                          model_type=args.model_type, 
                                                          is_eval=False, 
                                                          device="cuda")
-    
-    if args.use_lora:
+    print(args.use_lora)
+    if args.use_lora == 1:
         config = LoraConfig(
             r=16,
             lora_alpha=32,
@@ -204,12 +206,12 @@ if __name__ == "__main__":
     for name, param in model.named_parameters():
         if "Qformer" in name:
             param.requires_grad = True
-        # else:
-        #     param.requires_grad = False
-            # param.requires_grad = True
+        else:
+            if args.use_lora == 0:
+                param.requires_grad = False
     
     # use lora to train the visual and text encoder
-    if args.use_lora:
+    if args.use_lora == 1:
         model.print_trainable_parameters()
 
     # optmizer adamw for all parameters require grad
@@ -222,7 +224,7 @@ if __name__ == "__main__":
     accum_iter = args.accumulation_steps
 
     optimization_step = 0
-    for epoch in range(1):
+    for epoch in range(20):
         print("Epoch:", epoch)
         for idx, batch in enumerate(tqdm(train_dataloader)):
             batch["image"] = batch["image"].squeeze(1).to(device)
@@ -241,13 +243,32 @@ if __name__ == "__main__":
                     print("Evaluation...")
                     model.eval()
                     val_result = evaluate_model(split="val", model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
-                                                args=args)      
+                                                args=args, epoch=epoch)      
                     print("Step:", idx)
                     print("Validation result:")
                     print(val_result)
                     cur_val_score = val_result["final_score"]
-                    torch.save(model.state_dict(), f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}.pt")
+                    torch.save(model.state_dict(), f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}_epoch={epoch}.pt")
                     model.train()
 
             # if optimization_step > 1000:
             #     break
+
+"""
+v q qkv
+trainable params: 127,526,400 || all params: 12,251,930,496 || trainable%: 1.0408678048054119
+0: 1: 
+{'final_score': 16.09, 'unseen_question_score': {'score': 18.42, 'score_time': 5.19, 'score_num': 9.75, 'score_string': 21.95}, 'unseen
+_entity_score': {'score': 14.29, 'score_time': 1.13, 'score_num': 10.81, 'score_string': 16.04}} 
+0: 15.73 1: 15.738 2: 15.762
+
+v q
+0: 15.122 1: 15.347
+
+qkv
+0: 14.884 1: 14.68
+
+q
+0: 14.622 1: 14.385 2: 14.407
+
+"""
