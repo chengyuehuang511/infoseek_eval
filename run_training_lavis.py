@@ -1,4 +1,5 @@
 import os
+import time
 import pandas as pd
 import itertools
 from tqdm import tqdm
@@ -15,25 +16,9 @@ from infoseek_eval import evaluate as evaluate_infoseek
 import argparse
 from infoseek_data.data_path import INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES, OVEN_SPLIT2DATA
 from peft import LoraConfig, get_peft_model
-
-ratio = "10%"
-split2data = {
-        "val": f"infoseek_data/infoseek_val_{ratio}.jsonl",
-        "test": f"infoseek_data/infoseek_test_{ratio}.jsonl",
-        "human": f"infoseek_data/infoseek_human_{ratio}.jsonl",
-        "train": f"infoseek_data/infoseek_train_{ratio}.jsonl"
-    }
-# /coc/pskynet6/ychen3411/multimodal/infoseek/infoseek_qtype
-
-id2path = dict()
-
-# load image paths
-with open(ID2IMAGE, "r") as f:
-    for line in f:
-        line = json.loads(line)
-        image_id = line["image_id"]
-        path = line["image_path"]
-        id2path[image_id] = path
+from utils import set_logger, AverageMeter
+from torch.utils.tensorboard import SummaryWriter
+import logging
 
 def create_eval_data(split):
     # Read the input JSONL file
@@ -44,7 +29,7 @@ def create_eval_data(split):
     not_exit = []
     for idx, item in enumerate(batch_data):
         if idx % 10000 == 0:
-            print(f"Processing {idx}/{len(batch_data)}")
+            logging.info(f"Processing {idx}/{len(batch_data)}")
         path = id2path[item["image_id"]]
         # check path exists
         if not os.path.exists(path):
@@ -64,11 +49,11 @@ def process_images_in_batches(model, batch_data, batch_size, prompt):
     # Monitor the progress of the pool
     
     output = []
-    print("Generate predictions...")
+    logging.info("Generate predictions...")
     # Process images in batches
     for idx, i in enumerate(range(0, len(batch_data), batch_size)):
         if (idx + 1) % 100 == 0:
-            print(f"Processing batch {idx}/{len(batch_data)/batch_size}")
+            logging.info(f"Processing batch {idx}/{len(batch_data)/batch_size}")
         # Subset results for the current batch
         batch_subset = batch_data[i:i+batch_size]
 
@@ -152,7 +137,7 @@ class BLIP2Dataset(torch.utils.data.Dataset):
     
 
 if __name__ == "__main__":
-    print("Initialize Processor...")
+    logging.info("Initialize Processor...")
     parser = argparse.ArgumentParser()
     parser.add_argument("--split", type=str, default="val", help="val, test, or human")
     parser.add_argument("--name", type=str, default="blip2_t5", help="blip2_t5 | blip2_t5_instruct | blip2_opt | blip2_vicuna_instruct")
@@ -163,15 +148,46 @@ if __name__ == "__main__":
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
     parser.add_argument("--use_lora", type=int, help="use lora")
     parser.add_argument("--target_modules", type=str, default=["v", "q", "qkv"], nargs='*', help="target modules")
+    parser.add_argument("--ratio", type=str, default="10%", help="ratio")
+    parser.add_argument("--seed", type=int, default=42, help="seed")
+    parser.add_argument("--early_stop", type=int, default=20, help="early stop")
 
 
     args = parser.parse_args()
+
+    set_logger(args.output_dir + "/train.log")
+    
+    if args.ratio == "100%":
+        split2data = {
+            "val": "infoseek_data/infoseek_val.jsonl",
+            "test": "infoseek_data/infoseek_test.jsonl",
+            "human": "infoseek_data/infoseek_human.jsonl",
+            "train": "infoseek_data/infoseek_train.jsonl"
+        }
+    else:
+        split2data = {
+                "val": f"infoseek_data/infoseek_val_{args.ratio}.jsonl",
+                "test": f"infoseek_data/infoseek_test_{args.ratio}.jsonl",
+                "human": f"infoseek_data/infoseek_human_{args.ratio}.jsonl",
+                "train": f"infoseek_data/infoseek_train_{args.ratio}.jsonl"
+            }
+        # /coc/pskynet6/ychen3411/multimodal/infoseek/infoseek_qtype
+
+    id2path = dict()
+
+    # load image paths
+    with open(ID2IMAGE, "r") as f:
+        for line in f:
+            line = json.loads(line)
+            image_id = line["image_id"]
+            path = line["image_path"]
+            id2path[image_id] = path
 
     model, vis_processors, _ = load_model_and_preprocess(name=args.name,
                                                          model_type=args.model_type, 
                                                          is_eval=False, 
                                                          device="cuda")
-    print(args.use_lora)
+    logging.info(f"if use lora: {args.use_lora}")  
     if args.use_lora == 1:
         config = LoraConfig(
             r=16,
@@ -181,7 +197,7 @@ if __name__ == "__main__":
             target_modules=args.target_modules,  # ['v', 'q', 'qkv'],  # qformer, qkv
         )
         
-        print(config)
+        logging.info(config)
         model = get_peft_model(model, config)
         
 
@@ -195,14 +211,14 @@ if __name__ == "__main__":
         processor=vis_processors,
         PROMPT="Question: {} Short answer:"
     )
-    print("Initialize Dataloader...")
+    logging.info("Initialize Dataloader...")
     # Padding dataloader
     train_dataloader = DataLoader(
         blip_dataset, batch_size=args.batch_size, shuffle=True, num_workers=6
     )
 
     # # freeze everything except qformer
-    print("Freeze Model...")
+    logging.info("Freeze Model...")
     for name, param in model.named_parameters():
         if "Qformer" in name:
             param.requires_grad = True
@@ -212,7 +228,7 @@ if __name__ == "__main__":
     
     # use lora to train the visual and text encoder
     if args.use_lora == 1:
-        model.print_trainable_parameters()
+        logging.info(model.print_trainable_parameters())
 
     # optmizer adamw for all parameters require grad
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
@@ -223,36 +239,59 @@ if __name__ == "__main__":
 
     accum_iter = args.accumulation_steps
 
+    writer = SummaryWriter(args.output_dir)
     optimization_step = 0
+    best_val_score = 0
+    early_stop = args.early_stop
+    
     for epoch in range(20):
-        print("Epoch:", epoch)
+        start_time = time.time()
+        train_loss = AverageMeter("train_loss", ":.4e")
+
+        logging.info(f"=============== Epoch: {epoch} ===============")
         for idx, batch in enumerate(tqdm(train_dataloader)):
             batch["image"] = batch["image"].squeeze(1).to(device)
             output = model(samples=batch)
             loss = output["loss"]
+            train_loss.update(loss.item(), batch["image"].size(0))
             # Gradient accumulation
             loss = loss / accum_iter
             loss.backward()
             # print(loss.item())
-            if (idx + 1) % accum_iter == 0:
+            if (idx + 1) % accum_iter == 0 or idx == len(train_dataloader) - 1:
                 optimization_step += 1
                 optimizer.step()
                 optimizer.zero_grad()
 
-                if (optimization_step + 1) % 1000 == 0:
-                    print("Evaluation...")
+                if (optimization_step + 1) % 1000 == 0 or idx == len(train_dataloader) - 1:
+                    writer.add_scalar("loss/train_loss", train_loss.avg, optimization_step)
+                    
+                    logging.info(f"Step: {optimization_step} | Train Loss: {train_loss.avg}")
+                    
+                    logging.info("Evaluation...")
                     model.eval()
                     val_result = evaluate_model(split="val", model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
                                                 args=args, epoch=epoch)      
-                    print("Step:", idx)
-                    print("Validation result:")
-                    print(val_result)
+                    # logging.info("Step:", idx)
+                    logging.info("Validation result:", val_result)
                     cur_val_score = val_result["final_score"]
-                    torch.save(model.state_dict(), f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}_epoch={epoch}.pt")
+                    
+                    writer.add_scalar("score/val_score", cur_val_score, optimization_step)
+                    writer.add_scalar("score/val_unseen_question_score", val_result["unseen_question_score"]["score"], optimization_step)
+                    writer.add_scalar("score/val_unseen_entity_score", val_result["unseen_entity_score"]["score"], optimization_step)
+                    
+                    if cur_val_score > best_val_score:
+                        best_val_score = cur_val_score
+                        early_stop = args.early_stop
+                        torch.save(model.state_dict(), f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}_epoch={epoch}.pt")
+                        logging.info("-------- Save Best Model! --------")
+                    else:
+                        early_stop -= 1
+                        logging.info("Early Stop Left: {}".format(early_stop))
+                    if early_stop == 0:
+                        logging.info("-------- Early Stop! --------")
+                        break
                     model.train()
-
-            # if optimization_step > 1000:
-            #     break
 
 """
 v q qkv
