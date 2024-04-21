@@ -16,6 +16,10 @@ def set_logger(log_path):
     if os.path.exists(log_path) is True:
         os.remove(log_path)
     logger = logging.getLogger()
+    
+    for handler in logger.handlers[:]:  # remove all old handlers
+        logger.removeHandler(handler)
+
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:

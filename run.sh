@@ -13,7 +13,7 @@ model_type="pretrain_flant5xxl"  # pretrain_flant5xxl | pretrain_opt2.7b
 batch_size=8
 accumulation_steps=2
 target_modules="v q qkv"
-use_lora=0
+use_lora=1
 ratio="10%"
 
 # Create the output directory name

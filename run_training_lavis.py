@@ -19,6 +19,9 @@ from peft import LoraConfig, get_peft_model
 from utils import set_logger, AverageMeter
 from torch.utils.tensorboard import SummaryWriter
 import logging
+import numpy as np
+
+set_logger('/nethome/chuang475/flash/projects/infoseek_eval/logfile.log')
 
 def create_eval_data(split):
     # Read the input JSONL file
@@ -134,10 +137,19 @@ class BLIP2Dataset(torch.utils.data.Dataset):
  
     def __len__(self):
         return len(self.question)
+
+
+def set_seed(seed):
+    """Sets seed"""
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
     
 
 if __name__ == "__main__":
-    logging.info("Initialize Processor...")
     parser = argparse.ArgumentParser()
     parser.add_argument("--split", type=str, default="val", help="val, test, or human")
     parser.add_argument("--name", type=str, default="blip2_t5", help="blip2_t5 | blip2_t5_instruct | blip2_opt | blip2_vicuna_instruct")
@@ -152,10 +164,11 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("--early_stop", type=int, default=20, help="early stop")
 
-
     args = parser.parse_args()
 
+    set_seed(args.seed)
     set_logger(args.output_dir + "/train.log")
+    logging.info("Initialize Processor...")
     
     if args.ratio == "100%":
         split2data = {
@@ -292,6 +305,13 @@ if __name__ == "__main__":
                         logging.info("-------- Early Stop! --------")
                         break
                     model.train()
+        
+        # logging epoch finished in xx hours xx minutes xx seconds
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
+        logging.info(f"Epoch {epoch} finished in {elapsed_time}")
+        
 
 """
 v q qkv
