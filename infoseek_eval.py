@@ -385,6 +385,26 @@ def evaluate(prediction_path: str, reference_path: str, reference_qtype_path: st
         else:
             pass
     return evaluate_infoseek_full([unseen_question, unseen_entity], [qid2example, qid2example])
+
+
+def evaluate_seen(prediction_path: str, reference_path: str) -> Dict[str, Any]:
+    predictions = load_jsonl(prediction_path)
+    reference = load_jsonl(reference_path)
+    qid2example = prepare_qid2example(reference, reference)
+    seen = []
+    for pred in predictions:
+        data_id = pred['data_id']
+        if data_id in qid2example:
+            if qid2example[data_id]['data_split'].endswith('seen'):
+                seen.append(pred)
+            else:
+                raise ValueError(f"Data ID {data_id} not found in reference.")
+        else:
+            pass
+    split_score = evaluate_infoseek(seen, qid2example)
+    return {
+        'seen_score': split_score,
+    }
     
 
 def prepare_qid2example(

@@ -93,5 +93,5 @@ def select_random_subset(input_file, output_file, percentage=0.1):
             outfile.write(line)
 
 # Usage
-for split in ["train", "val", "test", "human"]:
-    select_random_subset(split2data[split], subset_output_path[split], 0.1)
+# for split in ["train", "val", "test", "human"]:
+#     select_random_subset(split2data[split], subset_output_path[split], 0.1)

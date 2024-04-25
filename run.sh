@@ -15,9 +15,10 @@ accumulation_steps=2
 target_modules="v q qkv"
 use_lora=0
 ratio="10%"
+split="val_seen"
 
 # Create the output directory name
-output_dir="experiments_${ratio}/${name}_${model_type}_bs${batch_size}_as${accumulation_steps}_lora${use_lora}_target${target_modules}_$(date +%Y%m%d_%H%M%S)"
+output_dir="experiments_${split}_${ratio}/${name}_${model_type}_bs${batch_size}_as${accumulation_steps}_lora${use_lora}_target${target_modules}_$(date +%Y%m%d_%H%M%S)"
 
 # Ensure the output directory exists
 mkdir -p "$output_dir"

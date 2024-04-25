@@ -13,6 +13,7 @@ import torch
 from PIL import Image
 import json
 from infoseek_eval import evaluate as evaluate_infoseek
+from infoseek_eval import evaluate_seen
 import argparse
 from infoseek_data.data_path import INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES, OVEN_SPLIT2DATA
 from peft import LoraConfig, get_peft_model
@@ -95,13 +96,19 @@ def evaluate_model(split, model, batch_size, step, prompt, args, epoch):
     # Save the predictions
     # development_{args.batch_size}_all_lora
     pred_path = f"{args.output_dir}/{args.name}_{args.model_type}_{split}_{step}_epoch={epoch}.jsonl"
-    ref_path = f"infoseek_data/infoseek_{split}.jsonl"
+    
+    # ref_path = f"infoseek_data/infoseek_{split}.jsonl"
+    ref_path = split2data[split]
     ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
+    
     with open(pred_path, "w") as f:
         for item in output:
             f.write(json.dumps(item) + "\n")
 
-    result = evaluate_infoseek(pred_path, ref_path, ref_qtype_path)
+    if split == "val_seen":
+        result = evaluate_seen(pred_path, ref_path)
+    else:
+        result = evaluate_infoseek(pred_path, ref_path, ref_qtype_path)
     return result
 
 
@@ -151,7 +158,7 @@ def set_seed(seed):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--split", type=str, default="val", help="val, test, or human")
+    parser.add_argument("--split", type=str, default="val_seen", help="val, test, or human")
     parser.add_argument("--name", type=str, default="blip2_t5", help="blip2_t5 | blip2_t5_instruct | blip2_opt | blip2_vicuna_instruct")
     parser.add_argument("--model_type", type=str, default="pretrain_flant5xxl", help="pretrain_flant5xxl ｜ flant5xxl ｜ pretrain_opt2.7b")
     parser.add_argument("--output_dir", type=str, default="predictions", help="output directory")
@@ -172,19 +179,20 @@ if __name__ == "__main__":
     
     if args.ratio == "100%":
         split2data = {
-            "val": "infoseek_data/infoseek_val.jsonl",
-            "test": "infoseek_data/infoseek_test.jsonl",
-            "human": "infoseek_data/infoseek_human.jsonl",
-            "train": "infoseek_data/infoseek_train.jsonl"
+            "val_seen": "infoseek/infoseek_val_seen.jsonl",
+            "val_unseen": "infoseek/infoseek_val_unseen.jsonl",
+            "test_seen": "infoseek/infoseek_test_seen.jsonl",
+            "test_unseen": "infoseek/infoseek_test_unseen.jsonl",
+            "train": "infoseek/infoseek_train.jsonl"
         }
     else:
         split2data = {
-                "val": f"infoseek_data/infoseek_val_{args.ratio}.jsonl",
-                "test": f"infoseek_data/infoseek_test_{args.ratio}.jsonl",
-                "human": f"infoseek_data/infoseek_human_{args.ratio}.jsonl",
-                "train": f"infoseek_data/infoseek_train_{args.ratio}.jsonl"
-            }
-        # /coc/pskynet6/ychen3411/multimodal/infoseek/infoseek_qtype
+            "val_seen": f"infoseek/infoseek_val_seen_{args.ratio}.jsonl",
+            "val_unseen": f"infoseek/infoseek_val_unseen_{args.ratio}.jsonl",
+            "test_seen": "infoseek/infoseek_test_seen.jsonl",
+            "test_unseen": "infoseek/infoseek_test_unseen.jsonl",
+            "train": f"infoseek/infoseek_train_{args.ratio}.jsonl"
+        }
 
     id2path = dict()
 
@@ -256,6 +264,7 @@ if __name__ == "__main__":
     optimization_step = 0
     best_val_score = 0
     early_stop = args.early_stop
+    early_stop_flag = False
     
     for epoch in range(20):
         start_time = time.time()
@@ -283,15 +292,19 @@ if __name__ == "__main__":
                     
                     logging.info("Evaluation...")
                     model.eval()
-                    val_result = evaluate_model(split="val", model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
+                    val_result = evaluate_model(split=args.split, model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
                                                 args=args, epoch=epoch)      
                     # logging.info("Step:", idx)
                     logging.info("Validation result:", val_result)
-                    cur_val_score = val_result["final_score"]
+                    if args.split == "val_seen":
+                        cur_val_score = val_result["seen_score"]
+                    else:
+                        cur_val_score = val_result["final_score"]
                     
                     writer.add_scalar("score/val_score", cur_val_score, optimization_step)
-                    writer.add_scalar("score/val_unseen_question_score", val_result["unseen_question_score"]["score"], optimization_step)
-                    writer.add_scalar("score/val_unseen_entity_score", val_result["unseen_entity_score"]["score"], optimization_step)
+                    if args.split != "val_seen":
+                        writer.add_scalar("score/val_unseen_question_score", val_result["unseen_question_score"]["score"], optimization_step)
+                        writer.add_scalar("score/val_unseen_entity_score", val_result["unseen_entity_score"]["score"], optimization_step)
                     
                     if cur_val_score > best_val_score:
                         best_val_score = cur_val_score
@@ -303,8 +316,12 @@ if __name__ == "__main__":
                         logging.info("Early Stop Left: {}".format(early_stop))
                     if early_stop == 0:
                         logging.info("-------- Early Stop! --------")
+                        early_stop_flag = True
                         break
                     model.train()
+
+        if early_stop_flag:
+            break
         
         # logging epoch finished in xx hours xx minutes xx seconds
         end_time = time.time()
