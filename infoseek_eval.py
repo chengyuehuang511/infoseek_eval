@@ -403,7 +403,7 @@ def evaluate_seen(prediction_path: str, reference_path: str) -> Dict[str, Any]:
         else:
             pass
     split_score = evaluate_infoseek(seen, qid2example)
-    logging.info(split_score)
+    # logging.info(split_score)
     return {'seen_score': split_score}
     
 

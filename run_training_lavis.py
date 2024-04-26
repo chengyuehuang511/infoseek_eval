@@ -351,7 +351,7 @@ if __name__ == "__main__":
                     val_result = evaluate_model(split=args.split, model=model, batch_size=args.batch_size, step=optimization_step, prompt="Question: {} Short answer:",
                                                 args=args, epoch=epoch)      
                     # logging.info("Step:", idx)
-                    logging.info("Validation result:", val_result)
+                    logging.info(f"Validation result: {val_result}")
                     if args.split == "val_seen":
                         cur_val_score = val_result["seen_score"]["score"]
                     else:
@@ -395,21 +395,21 @@ if __name__ == "__main__":
         logging.info("Zero-shot evaluation ...")
         val_seen_result = evaluate_model(split="val_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
                                     args=args, epoch=0)
-        logging.info("Validation seen result:", val_seen_result)
+        logging.info(f"Validation seen result: {val_seen_result}")
 
     logging.info("Validation unseen ...")
     val_unseen_result = evaluate_model(split="val_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
                                 args=args, epoch=0)
-    logging.info("Validation unseen result:", val_unseen_result)
+    logging.info(f"Validation unseen result: {val_unseen_result}")
     
     logging.info("Testing ...")
     test_seen_result = evaluate_model(split="test_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
                                 args=args, epoch=0)
-    logging.info("Testing result (seen):", test_seen_result)
+    logging.info(f"Testing result (seen): {test_seen_result}")
     
     test_unseen_result = evaluate_model(split="test_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",  
                                 args=args, epoch=0)
-    logging.info("Testing result (unseen):", test_unseen_result)
+    logging.info(f"Testing result (unseen): {test_unseen_result}")
         
 
 """

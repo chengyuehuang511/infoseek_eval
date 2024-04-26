@@ -1,10 +1,11 @@
 #!/bin/bash
 
-#SBATCH --partition="kira-lab"
+#SBATCH --partition="overcap"
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node="a40:1"
 #SBATCH --qos="short"
 #SBATCH -x shakey,nestor,voltron,chappie
+#SBATCH --mem-per-gpu=45G
 
 export PYTHONUNBUFFERED=TRUE
 cd /nethome/chuang475/flash/projects/infoseek_eval

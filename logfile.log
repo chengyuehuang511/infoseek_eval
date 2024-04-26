@@ -1,0 +1,3 @@
+2024-04-26 09:04:37,081:INFO: {'score': 10.39, 'score_time': 7.67, 'score_num': 6.61, 'score_string': 11.63}
+2024-04-26 09:04:37,084:INFO: Validation unseen result: {'seen_score': {'score': 10.39, 'score_time': 7.67, 'score_num': 6.61, 'score_string': 11.63}}
+2024-04-26 09:04:37,691:INFO: Validation seen result: {'final_score': 12.23, 'unseen_question_score': {'score': 12.89, 'score_time': 2.2, 'score_num': 7.95, 'score_string': 15.24}, 'unseen_entity_score': {'score': 11.63, 'score_time': 2.22, 'score_num': 6.22, 'score_string': 13.84}}
