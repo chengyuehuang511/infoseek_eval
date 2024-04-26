@@ -21,8 +21,8 @@ from utils import set_logger, AverageMeter
 from torch.utils.tensorboard import SummaryWriter
 import logging
 import numpy as np
-
-set_logger('/nethome/chuang475/flash/projects/infoseek_eval/logfile.log')
+import warnings
+warnings.filterwarnings("ignore")
 
 def create_eval_data(split):
     # Read the input JSONL file
@@ -99,16 +99,16 @@ def evaluate_model(split, model, batch_size, step, prompt, args, epoch):
     
     # ref_path = f"infoseek_data/infoseek_{split}.jsonl"
     ref_path = split2data[split]
-    ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
+    # ref_qtype_path = f"infoseek_data/infoseek_{split}_qtype.jsonl"
     
     with open(pred_path, "w") as f:
         for item in output:
             f.write(json.dumps(item) + "\n")
 
-    if split == "val_seen":
+    if split == "val_seen" or split == "test_seen":
         result = evaluate_seen(pred_path, ref_path)
     else:
-        result = evaluate_infoseek(pred_path, ref_path, ref_qtype_path)
+        result = evaluate_infoseek(pred_path, ref_path, ref_path)
     return result
 
 
@@ -170,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("--ratio", type=str, default="10%", help="ratio")
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("--early_stop", type=int, default=20, help="early stop")
+    parser.add_argument("--val_print_freq", type=int, default=1000, help="val print freq")
 
     args = parser.parse_args()
 
@@ -263,6 +264,7 @@ if __name__ == "__main__":
     writer = SummaryWriter(args.output_dir)
     optimization_step = 0
     best_val_score = 0
+    best_model_name = None
     early_stop = args.early_stop
     early_stop_flag = False
     
@@ -285,7 +287,7 @@ if __name__ == "__main__":
                 optimizer.step()
                 optimizer.zero_grad()
 
-                if (optimization_step + 1) % 1000 == 0 or idx == len(train_dataloader) - 1:
+                if (optimization_step + 1) % args.val_print_freq == 0 or idx == len(train_dataloader) - 1:
                     writer.add_scalar("loss/train_loss", train_loss.avg, optimization_step)
                     
                     logging.info(f"Step: {optimization_step} | Train Loss: {train_loss.avg}")
@@ -297,19 +299,20 @@ if __name__ == "__main__":
                     # logging.info("Step:", idx)
                     logging.info("Validation result:", val_result)
                     if args.split == "val_seen":
-                        cur_val_score = val_result["seen_score"]
+                        cur_val_score = val_result["seen_score"]["score"]
                     else:
                         cur_val_score = val_result["final_score"]
                     
                     writer.add_scalar("score/val_score", cur_val_score, optimization_step)
-                    if args.split != "val_seen":
+                    if args.split == "val_unseen":
                         writer.add_scalar("score/val_unseen_question_score", val_result["unseen_question_score"]["score"], optimization_step)
                         writer.add_scalar("score/val_unseen_entity_score", val_result["unseen_entity_score"]["score"], optimization_step)
                     
                     if cur_val_score > best_val_score:
                         best_val_score = cur_val_score
+                        best_model_name = f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}_epoch={epoch}.pt"
                         early_stop = args.early_stop
-                        torch.save(model.state_dict(), f"{args.output_dir}/{args.name}_{args.model_type}_{optimization_step}_val={cur_val_score}_epoch={epoch}.pt")
+                        torch.save(model.state_dict(), best_model_name)
                         logging.info("-------- Save Best Model! --------")
                     else:
                         early_stop -= 1
@@ -328,6 +331,17 @@ if __name__ == "__main__":
         elapsed_time = end_time - start_time
         elapsed_time = time.strftime("%H:%M:%S", time.gmtime(elapsed_time))
         logging.info(f"Epoch {epoch} finished in {elapsed_time}")
+    
+    # load best model according to best model name
+    model.load_state_dict(torch.load(best_model_name))
+    model.eval()
+    logging.info("Testing ...")
+    test_seen_result = evaluate_model(split="test_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
+                                args=args, epoch=0)
+    logging.info("Testing result (seen):", test_seen_result)
+    test_unseen_result = evaluate_model(split="test_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",  
+                                args=args, epoch=0)
+    logging.info("Testing result (unseen):", test_unseen_result)
         
 
 """

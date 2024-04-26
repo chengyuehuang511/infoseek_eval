@@ -5,6 +5,7 @@ import json
 import string
 from typing import Any, Dict, Generator, List, Tuple, Union
 from infoseek_data.data_path import OVEN_SPLIT2DATA, INFOSEEK_SPLIT2DATA, ID2IMAGE, IMAGES
+import logging
 
 
 def normalize_answer(text: str) -> str:
@@ -402,9 +403,8 @@ def evaluate_seen(prediction_path: str, reference_path: str) -> Dict[str, Any]:
         else:
             pass
     split_score = evaluate_infoseek(seen, qid2example)
-    return {
-        'seen_score': split_score,
-    }
+    logging.info(split_score)
+    return {'seen_score': split_score}
     
 
 def prepare_qid2example(
