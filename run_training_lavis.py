@@ -8,6 +8,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import cv2
+import copy
 from lavis.models import load_model_and_preprocess
 import torch
 from PIL import Image
@@ -21,6 +22,7 @@ from utils import set_logger, AverageMeter
 from torch.utils.tensorboard import SummaryWriter
 import logging
 import numpy as np
+from FTP import SGDP, AdamP
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -172,6 +174,8 @@ if __name__ == "__main__":
     parser.add_argument("--early_stop", type=int, default=20, help="early stop")
     parser.add_argument("--val_print_freq", type=int, default=1000, help="val print freq")
     parser.add_argument("--epoch", type=int, default=10, help="epoch")
+    parser.add_argument("--opt", type=str, default="adam", help="optimizer")
+    parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
 
     args = parser.parse_args()
 
@@ -211,6 +215,7 @@ if __name__ == "__main__":
                                                          is_eval=False, 
                                                          device="cuda")
     logging.info(f"if use lora: {args.use_lora}")  
+    logging.info(f"optimizer: {args.opt}")
     if args.use_lora == 1:
         config = LoraConfig(
             r=16,
@@ -254,8 +259,56 @@ if __name__ == "__main__":
         logging.info(model.print_trainable_parameters())
 
     # optmizer adamw for all parameters require grad
-    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
+    # optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
 
+    if args.opt == "sgdp":
+        # Initalize optimizer parameters
+        optimizer_params = {
+            "lr": args.lr,
+            "weight_decay": args.wd,
+            "momentum": 0.9,
+            "nesterov": True,
+            "k": 1, 
+            #"exclude_set": {'module.head.weight','module.head.bias'}
+        } 
+        # Cache pre-trained model weights 
+        params_to_opt = [x[1] for x in model.named_parameters() if x[1].requires_grad]
+        params_to_opt_name = [x[0] for x in model.named_parameters() if x[1].requires_grad]
+        params_anchor = copy.deepcopy(params_to_opt)
+        param_group = [{'params':params_to_opt,
+                        'pre': params_anchor, 
+                        'name': params_to_opt_name}]
+        optimizer = SGDP(param_group,**optimizer_params)
+
+    elif args.opt == "adamp":
+        # Initalize optimizer parameters
+        optimizer_params = {
+            "lr": args.lr,
+            "weight_decay": args.wd,
+            "k": 1, 
+            #"exclude_set": {'module.head.weight','module.head.bias'}
+        } 
+
+        # Cache pre-trained model weights 
+        params_to_opt = [x[1] for x in model.named_parameters() if x[1].requires_grad]
+        params_to_opt_name = [x[0] for x in model.named_parameters() if x[1].requires_grad]
+        params_anchor = copy.deepcopy(params_to_opt)
+        param_group = [{'params':params_to_opt,
+                        'pre': params_anchor, 
+                        'name': params_to_opt_name}]
+        optimizer = AdamP(param_group,**optimizer_params)
+    elif args.opt == "adam":
+        optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.wd)
+    else:
+        optimizer_params = {
+            "lr": args.lr,
+            "weight_decay": args.wd,
+            "momentum": 0.9,
+            "nesterov": True,
+        }   
+        optimizer = torch.optim.SGD(trainable_params, **optimizer_params)
+    
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     model.train()

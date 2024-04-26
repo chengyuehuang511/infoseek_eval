@@ -19,4 +19,5 @@ srun -u /nethome/chuang475/flash/miniconda3/envs/lavis/bin/python -u run_trainin
                                                         --output_dir "$output_dir" \
                                                         --val_print_freq $val_print_freq \
                                                         --epoch $epoch \
+                                                        --opt "$opt" \
                                                         --use_lora $use_lora \
