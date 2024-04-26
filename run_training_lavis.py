@@ -171,6 +171,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("--early_stop", type=int, default=20, help="early stop")
     parser.add_argument("--val_print_freq", type=int, default=1000, help="val print freq")
+    parser.add_argument("--epoch", type=int, default=10, help="epoch")
 
     args = parser.parse_args()
 
@@ -268,7 +269,7 @@ if __name__ == "__main__":
     early_stop = args.early_stop
     early_stop_flag = False
     
-    for epoch in range(20):
+    for epoch in range(args.epoch):
         start_time = time.time()
         train_loss = AverageMeter("train_loss", ":.4e")
 
@@ -333,12 +334,26 @@ if __name__ == "__main__":
         logging.info(f"Epoch {epoch} finished in {elapsed_time}")
     
     # load best model according to best model name
-    model.load_state_dict(torch.load(best_model_name))
+    if args.epoch > 0:  # not zero-shot
+        model.load_state_dict(torch.load(best_model_name))
     model.eval()
+
+    if args.epoch == 0:
+        logging.info("Zero-shot evaluation ...")
+        val_seen_result = evaluate_model(split="val_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
+                                    args=args, epoch=0)
+        logging.info("Validation seen result:", val_seen_result)
+
+    logging.info("Validation unseen ...")
+    val_unseen_result = evaluate_model(split="val_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
+                                args=args, epoch=0)
+    logging.info("Validation unseen result:", val_unseen_result)
+    
     logging.info("Testing ...")
     test_seen_result = evaluate_model(split="test_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
                                 args=args, epoch=0)
     logging.info("Testing result (seen):", test_seen_result)
+    
     test_unseen_result = evaluate_model(split="test_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",  
                                 args=args, epoch=0)
     logging.info("Testing result (unseen):", test_unseen_result)
