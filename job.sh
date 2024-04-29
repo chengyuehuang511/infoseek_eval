@@ -8,6 +8,7 @@
 #SBATCH --mem-per-gpu=45G
 
 export PYTHONUNBUFFERED=TRUE
+export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'
 cd /nethome/chuang475/flash/projects/infoseek_eval
 
 # Run the training command
@@ -22,3 +23,4 @@ srun -u /nethome/chuang475/flash/miniconda3/envs/lavis/bin/python -u run_trainin
                                                         --epoch $epoch \
                                                         --opt "$opt" \
                                                         --use_lora $use_lora \
+                                                        # --best_model_task "$best_model_task" \

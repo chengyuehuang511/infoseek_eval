@@ -23,6 +23,7 @@ from torch.utils.tensorboard import SummaryWriter
 import logging
 import numpy as np
 from FTP import SGDP, AdamP
+from adamh import AdamH
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -176,6 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--epoch", type=int, default=10, help="epoch")
     parser.add_argument("--opt", type=str, default="adam", help="optimizer")
     parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
+    parser.add_argument("--best_model_task", type=str, default=None, help="best model task")
 
     args = parser.parse_args()
 
@@ -298,6 +300,18 @@ if __name__ == "__main__":
                         'pre': params_anchor, 
                         'name': params_to_opt_name}]
         optimizer = AdamP(param_group,**optimizer_params)
+    
+    elif args.opt == "adamh":
+        optimizer_params = {
+            "lr": args.lr,
+            "weight_decay": 1.0, #args.weight_decay,
+        } 
+        params_to_opt = [x[1] for x in model.named_parameters() if x[1].requires_grad]
+        params_anchor = copy.deepcopy(params_to_opt)
+        param_group = [{'params':params_to_opt,
+                        'pre': params_anchor}]
+        optimizer = AdamH(param_group,**optimizer_params)
+    
     elif args.opt == "adam":
         optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=args.wd)
     else:
@@ -387,15 +401,76 @@ if __name__ == "__main__":
         logging.info(f"Epoch {epoch} finished in {elapsed_time}")
     
     # load best model according to best model name
+    best_models = {
+        "zeroshot": None,
+        "Q": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora0_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_9999_val=66.89_epoch=2.pt",
+        "VQ": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetqkv_20240426_013428/blip2_t5_pretrain_flant5xxl_19999_val=72.45_epoch=4.pt",
+        "QL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q_20240426_013428/blip2_t5_pretrain_flant5xxl_24055_val=76.8_epoch=4.pt",
+        "VQL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_24055_val=79.28_epoch=4.pt",
+        
+        "Q_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_044130/blip2_t5_pretrain_flant5xxl_24055_val=72.49_epoch=4.pt",
+        "VQ_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_044134/blip2_t5_pretrain_flant5xxl_24055_val=72.49_epoch=4.pt",
+        "QL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_044133/blip2_t5_pretrain_flant5xxl_24055_val=75.13_epoch=4.pt",
+        "VQL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_044132/blip2_t5_pretrain_flant5xxl_24055_val=75.24_epoch=4.pt",
+
+        "Q_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_24055_val=67.25_epoch=4.pt",
+        "VQ_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_234539/blip2_t5_pretrain_flant5xxl_24055_val=66.53_epoch=4.pt",
+        "QL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_234539/blip2_t5_pretrain_flant5xxl_24055_val=74.98_epoch=4.pt",
+        "VQL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_24055_val=75.66_epoch=4.pt",
+    
+    }
+
+    best_models = {
+        "zeroshot": None,
+        "Q": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora0_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_9999_val=66.89_epoch=2.pt", 
+        "VQ": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetqkv_20240426_013428/blip2_t5_pretrain_flant5xxl_19999_val=72.45_epoch=4.pt",
+        "QL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q_20240426_013428/blip2_t5_pretrain_flant5xxl_38488_val=79.46_epoch=7.pt",
+        "VQL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_24055_val=79.28_epoch=4.pt",
+
+        "Q_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_044130/blip2_t5_pretrain_flant5xxl_48110_val=77.79_epoch=9.pt",
+        "VQ_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_044134/blip2_t5_pretrain_flant5xxl_48110_val=77.82_epoch=9.pt",
+        "QL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_044133/blip2_t5_pretrain_flant5xxl_48110_val=79.42_epoch=9.pt",
+        "VQL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_044132/blip2_t5_pretrain_flant5xxl_48110_val=78.7_epoch=9.pt",
+
+        "Q_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_48110_val=72.0_epoch=9.pt",
+        "VQ_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_234539/blip2_t5_pretrain_flant5xxl_48110_val=70.42_epoch=9.pt",
+        "QL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_234539/blip2_t5_pretrain_flant5xxl_48110_val=78.57_epoch=9.pt",
+        "VQL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_48110_val=79.09_epoch=9.pt",
+    }
+    
+    if args.epoch == 0:  # use best model
+        if args.opt == "adam":
+            tmp = ""
+        elif args.opt == "adamp":
+            tmp = "_ftp"
+        elif args.opt == "adamh":
+            tmp = "_h"
+        
+        if args.use_lora == 1:
+            if args.target_modules == ["v", "q", "qkv"]:
+                args.best_model_task = "VQL" + tmp
+            elif args.target_modules == ["v", "q"]:
+                args.best_model_task = "QL" + tmp
+            elif args.target_modules == ["qkv"]:
+                args.best_model_task = "VQ" + tmp
+        else:
+            args.best_model_task = "Q" + tmp
+
+    if args.best_model_task is not None:
+        logging.info("best model task: {}".format(args.best_model_task))
+        model.load_state_dict(torch.load(best_models[args.best_model_task], map_location='cpu'))
     if args.epoch > 0:  # not zero-shot
-        model.load_state_dict(torch.load(best_model_name))
+        logging.info("load best model name and not zero-shot")
+        model.load_state_dict(torch.load(best_model_name, map_location='cpu'))
     model.eval()
 
-    if args.epoch == 0:
+    if args.epoch == 0 and args.best_model_task is None:
         logging.info("Zero-shot evaluation ...")
-        val_seen_result = evaluate_model(split="val_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
-                                    args=args, epoch=0)
-        logging.info(f"Validation seen result: {val_seen_result}")
+    
+    logging.info("Validation seen ...")
+    val_seen_result = evaluate_model(split="val_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
+                                args=args, epoch=0)
+    logging.info(f"Validation seen result: {val_seen_result}")
 
     logging.info("Validation unseen ...")
     val_unseen_result = evaluate_model(split="val_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
