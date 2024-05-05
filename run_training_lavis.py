@@ -178,6 +178,7 @@ if __name__ == "__main__":
     parser.add_argument("--opt", type=str, default="adam", help="optimizer")
     parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
     parser.add_argument("--best_model_task", type=str, default=None, help="best model task")
+    parser.add_argument("--lora_alpha", type=int, default=32, help="lora alpha")
 
     args = parser.parse_args()
 
@@ -217,11 +218,12 @@ if __name__ == "__main__":
                                                          is_eval=False, 
                                                          device="cuda")
     logging.info(f"if use lora: {args.use_lora}")  
+    logging.info(f"lora alpha: {args.lora_alpha}")
     logging.info(f"optimizer: {args.opt}")
     if args.use_lora == 1:
         config = LoraConfig(
             r=16,
-            lora_alpha=32,
+            lora_alpha=args.lora_alpha,
             lora_dropout=0.05,
             bias="none",
             target_modules=args.target_modules,  # ['v', 'q', 'qkv'],  # qformer, qkv
@@ -401,24 +403,24 @@ if __name__ == "__main__":
         logging.info(f"Epoch {epoch} finished in {elapsed_time}")
     
     # load best model according to best model name
-    best_models = {
-        "zeroshot": None,
-        "Q": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora0_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_9999_val=66.89_epoch=2.pt",
-        "VQ": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetqkv_20240426_013428/blip2_t5_pretrain_flant5xxl_19999_val=72.45_epoch=4.pt",
-        "QL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q_20240426_013428/blip2_t5_pretrain_flant5xxl_24055_val=76.8_epoch=4.pt",
-        "VQL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_24055_val=79.28_epoch=4.pt",
+    # best_models = {
+    #     "zeroshot": None,
+    #     "Q": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora0_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_9999_val=66.89_epoch=2.pt",
+    #     "VQ": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetqkv_20240426_013428/blip2_t5_pretrain_flant5xxl_19999_val=72.45_epoch=4.pt",
+    #     "QL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q_20240426_013428/blip2_t5_pretrain_flant5xxl_24055_val=76.8_epoch=4.pt",
+    #     "VQL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_24055_val=79.28_epoch=4.pt",
         
-        "Q_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_044130/blip2_t5_pretrain_flant5xxl_24055_val=72.49_epoch=4.pt",
-        "VQ_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_044134/blip2_t5_pretrain_flant5xxl_24055_val=72.49_epoch=4.pt",
-        "QL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_044133/blip2_t5_pretrain_flant5xxl_24055_val=75.13_epoch=4.pt",
-        "VQL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_044132/blip2_t5_pretrain_flant5xxl_24055_val=75.24_epoch=4.pt",
+    #     "Q_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_044130/blip2_t5_pretrain_flant5xxl_24055_val=72.49_epoch=4.pt",
+    #     "VQ_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_044134/blip2_t5_pretrain_flant5xxl_24055_val=72.49_epoch=4.pt",
+    #     "QL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_044133/blip2_t5_pretrain_flant5xxl_24055_val=75.13_epoch=4.pt",
+    #     "VQL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_044132/blip2_t5_pretrain_flant5xxl_24055_val=75.24_epoch=4.pt",
 
-        "Q_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_24055_val=67.25_epoch=4.pt",
-        "VQ_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_234539/blip2_t5_pretrain_flant5xxl_24055_val=66.53_epoch=4.pt",
-        "QL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_234539/blip2_t5_pretrain_flant5xxl_24055_val=74.98_epoch=4.pt",
-        "VQL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_24055_val=75.66_epoch=4.pt",
+    #     "Q_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_24055_val=67.25_epoch=4.pt",
+    #     "VQ_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_234539/blip2_t5_pretrain_flant5xxl_24055_val=66.53_epoch=4.pt",
+    #     "QL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_234539/blip2_t5_pretrain_flant5xxl_24055_val=74.98_epoch=4.pt",
+    #     "VQL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_24055_val=75.66_epoch=4.pt",
     
-    }
+    # }
 
     best_models = {
         "zeroshot": None,

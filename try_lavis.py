@@ -16,27 +16,42 @@ model, vis_processors, _ = load_model_and_preprocess(name="blip2_t5", model_type
 #         param.requires_grad = False
 
 # Let's define the LoraConfig
-config = LoraConfig(
+"""
+config_qkv = LoraConfig(
     r=16,
     lora_alpha=32,
     lora_dropout=0.05,
     bias="none",
-    target_modules=['v', 'q', 'qkv'],  # qformer, qkv, language_model
+    target_modules=['qkv'],  # qformer, qkv, language_model
 )
-print(config)
+
+config_vq = LoraConfig(
+    r=4,
+    lora_alpha=32,
+    lora_dropout=0.05,
+    bias="none",
+    target_modules=['v', 'q'],  # qformer, qkv, language_model
+)
 
 # Get our peft model and print the number of trainable parameters
-model = get_peft_model(model, config)
+model = get_peft_model(model, config_qkv)
+model = get_peft_model(model, config_vq)
+"""
 
 for name, param in model.named_parameters():
-    if "Qformer" in name:
+    # if "Qformer" in name:
+    #     param.requires_grad = True
+  
+    if ("qkv" in name) or ("v" in name) or ("q" in name):
         param.requires_grad = True
+    else:
+        param.requires_grad = False
     if param.requires_grad == True:
-        print(name)   
+        print(name) 
 
-model.print_trainable_parameters()
+# model.print_trainable_parameters()
 # print(model)
-# with open('arch_lavis_blip2_opt_lora.txt', 'w') as file:
+# with open('arch_lavis_blip2_t5.txt', 'w') as file:
 #     print(model, file=file)
 
 

@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node="a40:1"
 #SBATCH --qos="short"
-#SBATCH -x shakey,nestor,voltron,chappie
+#SBATCH -x shakey,nestor,voltron,chappie,puma,randotron
 #SBATCH --mem-per-gpu=45G
 
 export PYTHONUNBUFFERED=TRUE
@@ -23,4 +23,5 @@ srun -u /nethome/chuang475/flash/miniconda3/envs/lavis/bin/python -u run_trainin
                                                         --epoch $epoch \
                                                         --opt "$opt" \
                                                         --use_lora $use_lora \
+                                                        --lora_alpha $lora_alpha \
                                                         # --best_model_task "$best_model_task" \
