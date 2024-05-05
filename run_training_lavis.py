@@ -179,6 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--wd", type=float, default=0.01, help="weight decay")
     parser.add_argument("--best_model_task", type=str, default=None, help="best model task")
     parser.add_argument("--lora_alpha", type=int, default=32, help="lora alpha")
+    parser.add_argument("--lora_rank", type=int, default=16, help="lora rank")
 
     args = parser.parse_args()
 
@@ -219,10 +220,11 @@ if __name__ == "__main__":
                                                          device="cuda")
     logging.info(f"if use lora: {args.use_lora}")  
     logging.info(f"lora alpha: {args.lora_alpha}")
+    logging.info(f"lora rank: {args.lora_rank}")
     logging.info(f"optimizer: {args.opt}")
     if args.use_lora == 1:
         config = LoraConfig(
-            r=16,
+            r=args.lora_rank,
             lora_alpha=args.lora_alpha,
             lora_dropout=0.05,
             bias="none",
