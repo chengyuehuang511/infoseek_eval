@@ -24,5 +24,5 @@ srun -u /nethome/chuang475/flash/miniconda3/envs/lavis/bin/python -u run_trainin
                                                         --opt "$opt" \
                                                         --use_lora $use_lora \
                                                         --lora_alpha $lora_alpha \
-                                                        # --lora_rank $lora_rank \
+                                                        --lora_rank $lora_rank \
                                                         # --best_model_task "$best_model_task" \

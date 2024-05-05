@@ -169,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
     parser.add_argument("--accumulation_steps", type=int, default=4, help="accumulation size")
     parser.add_argument("--use_lora", type=int, help="use lora")
-    parser.add_argument("--target_modules", type=str, default=["v", "q", "qkv"], nargs='*', help="target modules")
+    parser.add_argument("--target_modules", type=str, default=None, nargs='*', help="target modules")
     parser.add_argument("--ratio", type=str, default="10%", help="ratio")
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("--early_stop", type=int, default=20, help="early stop")
@@ -218,10 +218,13 @@ if __name__ == "__main__":
                                                          model_type=args.model_type, 
                                                          is_eval=False, 
                                                          device="cuda")
+    
+    logging.info("target modules: {}".format(args.target_modules))
     logging.info(f"if use lora: {args.use_lora}")  
     logging.info(f"lora alpha: {args.lora_alpha}")
     logging.info(f"lora rank: {args.lora_rank}")
     logging.info(f"optimizer: {args.opt}")
+    
     if args.use_lora == 1:
         config = LoraConfig(
             r=args.lora_rank,
@@ -258,7 +261,15 @@ if __name__ == "__main__":
             param.requires_grad = True
         else:
             if args.use_lora == 0:
-                param.requires_grad = False
+                if_freeze = True
+                for target_module in args.target_modules:
+                    if f".{target_module}." in name:
+                        param.requires_grad = True
+                        if_freeze = False
+                        logging.info(name)
+                        break
+                if if_freeze:
+                    param.requires_grad = False
     
     # use lora to train the visual and text encoder
     if args.use_lora == 1:
