@@ -5,6 +5,7 @@ import logging
 from utils import set_logger
 
 if_lora = True
+if_qformer = True
 # model, vis_processors, _ = load_model_and_preprocess(name="blip2_opt", model_type="pretrain_opt2.7b", is_eval=False, device="cuda")
 model, vis_processors, _ = load_model_and_preprocess(name="blip2_t5", model_type="pretrain_flant5xxl", is_eval=False, device="cuda")
 
@@ -51,10 +52,11 @@ model = get_peft_model(model, config_qkv)
 model = get_peft_model(model, config_vq)
 """
 
-set_logger(f"arch_lavis_blip2_t5_lora_{if_lora}.log")
+set_logger(f"arch_lavis_blip2_t5_lora_{if_lora}_qformer_{if_qformer}.log")
 for name, param in model.named_parameters():
-    # if "Qformer" in name:
-    #     param.requires_grad = True
+    if if_qformer:
+        if "Qformer" in name:
+            param.requires_grad = True
     if if_lora == False:
         if (".qkv." in name) or (".v." in name) or (".q." in name):
             param.requires_grad = True
@@ -63,7 +65,7 @@ for name, param in model.named_parameters():
     if param.requires_grad == True:
         logging.info(name) 
 
-# model.print_trainable_parameters()
+model.print_trainable_parameters()
 # print(model)
 # with open('arch_lavis_blip2_t5.txt', 'w') as file:
 #     print(model, file=file)

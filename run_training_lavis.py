@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import cv2
 import copy
-from lavis.models import load_model_and_preprocess
+from lavis.models import load_preprocess
 import torch
 from PIL import Image
 import json
@@ -26,6 +26,8 @@ from FTP import SGDP, AdamP
 from adamh import AdamH
 import warnings
 warnings.filterwarnings("ignore")
+from omegaconf import OmegaConf
+from lavis.common.registry import registry
 
 def create_eval_data(split):
     # Read the input JSONL file
@@ -157,6 +159,56 @@ def set_seed(seed):
     np.random.seed(seed)
     torch.backends.cudnn.benchmark = False
     torch.backends.cudnn.deterministic = True
+
+
+def load_model_and_preprocess(name, model_type, is_eval=False, device="cpu", freeze_vit=False):
+    """
+    Load model and its related preprocessors.
+
+    List all available models and types in registry:
+    >>> from lavis.models import model_zoo
+    >>> print(model_zoo)
+
+    Args:
+        name (str): name of the model.
+        model_type (str): type of the model.
+        is_eval (bool): whether the model is in eval mode. Default: False.
+        device (str): device to use. Default: "cpu".
+
+    Returns:
+        model (torch.nn.Module): model.
+        vis_processors (dict): preprocessors for visual inputs.
+        txt_processors (dict): preprocessors for text inputs.
+    """
+    model_cls = registry.get_model_class(name)
+
+    cfg = OmegaConf.load(model_cls.default_config_path(model_type))
+    if cfg is not None:
+        # load model
+        cfg.model.freeze_vit = freeze_vit
+        model_cfg = cfg.model
+        model = model_cls.from_config(model_cfg)
+
+        if is_eval:
+            model.eval()
+        
+        # load preprocess
+        preprocess_cfg = cfg.preprocess
+
+        vis_processors, txt_processors = load_preprocess(preprocess_cfg)
+    else:
+        vis_processors, txt_processors = None, None
+        logging.info(
+            f"""No default preprocess for model {name} ({model_type}).
+                This can happen if the model is not finetuned on downstream datasets,
+                or it is not intended for direct use without finetuning.
+            """
+        )
+
+    if device == "cpu" or device == torch.device("cpu"):
+        model = model.float()
+
+    return model.to(device), vis_processors, txt_processors
     
 
 if __name__ == "__main__":
@@ -224,6 +276,20 @@ if __name__ == "__main__":
     logging.info(f"lora alpha: {args.lora_alpha}")
     logging.info(f"lora rank: {args.lora_rank}")
     logging.info(f"optimizer: {args.opt}")
+
+    if (args.use_lora == 0) and (args.target_modules == ['v', 'q', 'qkv']):
+        logging.info("train all parameters")
+        args.batch_size = int(args.batch_size / 8)
+        args.accumulation_steps = int(args.accumulation_steps * 8)
+        logging.info(f"batch size: {args.batch_size}")
+        logging.info(f"accumulation steps: {args.accumulation_steps}")
+    
+    if (args.use_lora == 0) and (args.target_modules == ['v', 'q']):
+        logging.info("train V Q parameters")
+        args.batch_size = int(args.batch_size / 8)
+        args.accumulation_steps = int(args.accumulation_steps * 8)
+        logging.info(f"batch size: {args.batch_size}")
+        logging.info(f"accumulation steps: {args.accumulation_steps}")
     
     if args.use_lora == 1:
         config = LoraConfig(
@@ -317,11 +383,16 @@ if __name__ == "__main__":
         optimizer = AdamP(param_group,**optimizer_params)
     
     elif args.opt == "adamh":
+        wd = 0.3
         optimizer_params = {
             "lr": args.lr,
-            "weight_decay": 1.0, #args.weight_decay,
+            "weight_decay": wd, #args.weight_decay, 1
         } 
+        logging.info("AdamH WD: {}".format(wd))
         params_to_opt = [x[1] for x in model.named_parameters() if x[1].requires_grad]
+        # if args.use_lora == 1:
+        #     param_group = [{'params':params_to_opt}]
+        # else:
         params_anchor = copy.deepcopy(params_to_opt)
         param_group = [{'params':params_to_opt,
                         'pre': params_anchor}]
@@ -443,14 +514,14 @@ if __name__ == "__main__":
         "VQL": "experiments_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_bs8_as2_lora1_targetv q qkv_20240426_013427/blip2_t5_pretrain_flant5xxl_24055_val=79.28_epoch=4.pt",
 
         "Q_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_044130/blip2_t5_pretrain_flant5xxl_48110_val=77.79_epoch=9.pt",
-        "VQ_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_044134/blip2_t5_pretrain_flant5xxl_48110_val=77.82_epoch=9.pt",
+        "VQ_ftp": "experiments/experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch20_bs8_as2_lora1_targetqkv_20240513_180700/blip2_t5_pretrain_flant5xxl_91409_val=80.15_epoch=18.pt",
         "QL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_044133/blip2_t5_pretrain_flant5xxl_48110_val=79.42_epoch=9.pt",
         "VQL_ftp": "experiments_adamp_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_044132/blip2_t5_pretrain_flant5xxl_48110_val=78.7_epoch=9.pt",
 
-        "Q_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora0_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_48110_val=72.0_epoch=9.pt",
-        "VQ_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetqkv_20240426_234539/blip2_t5_pretrain_flant5xxl_48110_val=70.42_epoch=9.pt",
-        "QL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q_20240426_234539/blip2_t5_pretrain_flant5xxl_48110_val=78.57_epoch=9.pt",
-        "VQL_h": "experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch10_bs8_as2_lora1_targetv q qkv_20240426_234538/blip2_t5_pretrain_flant5xxl_48110_val=79.09_epoch=9.pt",
+        "Q_h": "experiments/wd_0.3_new/experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch20_bs8_as2_lora0_target_20240515_052826/blip2_t5_pretrain_flant5xxl_48110_val=77.94_epoch=9.pt",
+        "VQ_h": "experiments/wd_0.1_new/experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch20_bs8_as2_lora1_targetqkv_20240514_122104/blip2_t5_pretrain_flant5xxl_43299_val=77.7_epoch=8.pt",
+        "QL_h": "experiments/experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch20_bs8_as2_lora1_targetv q_20240513_180528/blip2_t5_pretrain_flant5xxl_86598_val=81.38_epoch=17.pt",
+        "VQL_h": "experiments/wd_0.3_new/experiments_adamh_val_seen_10%_slurm/blip2_t5_pretrain_flant5xxl_epoch20_bs8_as2_lora1_targetv q qkv_20240515_052827/blip2_t5_pretrain_flant5xxl_43299_val=80.2_epoch=8.pt",
     }
     
     if args.epoch == 0:  # use best model
@@ -492,14 +563,14 @@ if __name__ == "__main__":
                                 args=args, epoch=0)
     logging.info(f"Validation unseen result: {val_unseen_result}")
     
-    logging.info("Testing ...")
-    test_seen_result = evaluate_model(split="test_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
-                                args=args, epoch=0)
-    logging.info(f"Testing result (seen): {test_seen_result}")
+    # logging.info("Testing ...")
+    # test_seen_result = evaluate_model(split="test_seen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",
+    #                             args=args, epoch=0)
+    # logging.info(f"Testing result (seen): {test_seen_result}")
     
-    test_unseen_result = evaluate_model(split="test_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",  
-                                args=args, epoch=0)
-    logging.info(f"Testing result (unseen): {test_unseen_result}")
+    # test_unseen_result = evaluate_model(split="test_unseen", model=model, batch_size=args.batch_size, step=0, prompt="Question: {} Short answer:",  
+    #                             args=args, epoch=0)
+    # logging.info(f"Testing result (unseen): {test_unseen_result}")
         
 
 """
